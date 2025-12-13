@@ -292,21 +292,57 @@ unregister_fun(N/Arity) :- retractall(fun(N)),
 % ============================================================
 
 :- use_module(library(ordsets)).
+:- use_module(library(assoc)).
 
 unique_combinations_star(List, Size, Result) :-
     (number(Size) -> K = Size ; atom_number(Size, K)),
     (K > 0 ->
-        maplist(extract_expr_info, List, Infos),
+        variabilize_term(List, VariabilizedList),
+        maplist(extract_expr_info, VariabilizedList, Infos),
         build_inverted_index(Infos, InvIndex),
         include(is_hub_candidate(K), InvIndex, HubCandidates),
         maplist(generate_combos_for_hub(K, Infos), HubCandidates, NestedCombos),
         append(NestedCombos, FlatCombos),
         sort(FlatCombos, UniqueCombos),
-        maplist(format_combo_output, UniqueCombos, Conjuncts),
+        remove_alpha_duplicates(UniqueCombos, AlphaUniqueCombos),
+        maplist(format_combo_output, AlphaUniqueCombos, Conjuncts),
         Result = Conjuncts
     ;
         Result = []
     ).
+
+remove_alpha_duplicates([], []).
+remove_alpha_duplicates([H|T], [H|Result]) :-
+    exclude(=@=(H), T, Remaining),
+    remove_alpha_duplicates(Remaining, Result).
+
+variabilize_term(Term, VarTerm) :-
+    empty_assoc(Map),
+    variabilize_term(Term, Map, _, VarTerm).
+
+variabilize_term(Var, Map, Map, Var) :- var(Var), !.
+variabilize_term(Atom, Map, MapOut, Var) :-
+    atom(Atom),
+    atom_chars(Atom, ['$'|_]), !,
+    ( get_assoc(Atom, Map, Var) ->
+        MapOut = Map
+    ;
+        put_assoc(Atom, Map, Var, MapOut)
+    ).
+variabilize_term([H|T], Map, MapOut, [HVar|TVar]) :- !,
+    variabilize_term(H, Map, MapMid, HVar),
+    variabilize_term(T, MapMid, MapOut, TVar).
+variabilize_term(Term, Map, MapOut, NewTerm) :-
+    compound(Term), !,
+    Term =.. [F|Args],
+    variabilize_list_args(Args, Map, MapOut, NewArgs),
+    NewTerm =.. [F|NewArgs].
+variabilize_term(Term, Map, Map, Term).
+
+variabilize_list_args([], Map, Map, []).
+variabilize_list_args([H|T], Map, MapOut, [HVar|TVar]) :-
+    variabilize_term(H, Map, MapMid, HVar),
+    variabilize_list_args(T, MapMid, MapOut, TVar).
 
 extract_expr_info(Expr, info(Expr, Vars, Functor)) :-
     get_all_vars(Expr, Vars),
