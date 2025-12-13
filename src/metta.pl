@@ -400,7 +400,17 @@ format_combo_output(Combo, [conjunct, [',' | Combo]]).
 
 :- register_fun(unique_combinations_star).
 
-'cut-first-char'(Atom, Result) :-
-    atom(Atom),
-    sub_atom(Atom, 1, _, 0, Result).
-:- register_fun('cut-first-char').
+% ============================================================
+% Sort Conjunction Implementation
+% ============================================================
+
+:- use_module(library(varnumbers)).
+:- register_fun(sort_conj).
+
+sort_conj(List, SortedList) :-
+    copy_term(List, Copy),
+    numbervars(Copy, 0, _),
+    msort(Copy, Sorted),
+    varnumbers(Sorted, SortedList).
+
+
