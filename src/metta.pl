@@ -280,7 +280,12 @@ unregister_fun(N/Arity) :- retractall(fun(N)),
                           'floor-math', 'round-math', 'sin-math', 'cos-math', 'tan-math', 'asin-math','random-int','random-float',
                           'acos-math', 'atan-math', 'isnan-math', 'isinf-math', 'min-atom', 'max-atom',
                           'foldl-atom', 'map-atom', 'filter-atom','current-time','format-time', library, exists_file,
-                          import_prolog_function, 'Predicate', callPredicate, assertaPredicate, assertzPredicate, retractPredicate]).
+                          import_prolog_function, 'Predicate', callPredicate, assertaPredicate, assertzPredicate, retractPredicate,
+                          'cut-first-char']).
+
+'cut-first-char'(Atom, Result) :-
+    atom(Atom),
+    sub_atom(Atom, 1, _, 0, Result).
 
 % ============================================================
 % Unique Combinations Star Implementation
@@ -394,3 +399,8 @@ member_exact(X, [_|Ys]) :- member_exact(X, Ys).
 format_combo_output(Combo, [conjunct, [',' | Combo]]).
 
 :- register_fun(unique_combinations_star).
+
+'cut-first-char'(Atom, Result) :-
+    atom(Atom),
+    sub_atom(Atom, 1, _, 0, Result).
+:- register_fun('cut-first-char').
