@@ -281,3 +281,116 @@ unregister_fun(N/Arity) :- retractall(fun(N)),
                           'acos-math', 'atan-math', 'isnan-math', 'isinf-math', 'min-atom', 'max-atom',
                           'foldl-atom', 'map-atom', 'filter-atom','current-time','format-time', library, exists_file,
                           import_prolog_function, 'Predicate', callPredicate, assertaPredicate, assertzPredicate, retractPredicate]).
+
+% ============================================================
+% Unique Combinations Star Implementation
+% ============================================================
+
+:- use_module(library(ordsets)).
+
+unique_combinations_star(List, Size, Result) :-
+    (number(Size) -> K = Size ; atom_number(Size, K)),
+    (K > 0 ->
+        maplist(extract_expr_info, List, Infos),
+        build_inverted_index(Infos, InvIndex),
+        include(is_hub_candidate(K), InvIndex, HubCandidates),
+        maplist(generate_combos_for_hub(K, Infos), HubCandidates, NestedCombos),
+        append(NestedCombos, FlatCombos),
+        sort(FlatCombos, UniqueCombos),
+        maplist(format_combo_output, UniqueCombos, Conjuncts),
+        Result = Conjuncts
+    ;
+        Result = []
+    ).
+
+extract_expr_info(Expr, info(Expr, Vars, Functor)) :-
+    get_all_vars(Expr, Vars),
+    get_functor_safe(Expr, Functor).
+
+get_all_vars(Term, Vars) :-
+    term_variables(Term, PrologVars),
+    get_atom_vars(Term, AtomVars),
+    append(PrologVars, AtomVars, AllVars),
+    sort(AllVars, Vars).
+
+get_atom_vars(Term, Vars) :-
+    get_atom_vars_acc(Term, [], Vars).
+
+get_atom_vars_acc(Var, Acc, Acc) :- var(Var), !.
+get_atom_vars_acc(Atom, Acc, [Atom|Acc]) :-
+    atom(Atom),
+    atom_chars(Atom, ['$'|_]), !.
+get_atom_vars_acc(List, Acc, Result) :-
+    is_list(List), !,
+    foldl(get_atom_vars_acc, List, Acc, Result).
+get_atom_vars_acc(Compound, Acc, Result) :-
+    compound(Compound), !,
+    Compound =.. [_|Args],
+    foldl(get_atom_vars_acc, Args, Acc, Result).
+get_atom_vars_acc(_, Acc, Acc).
+
+get_functor_safe([F|_], F) :- !.
+get_functor_safe(Term, F) :- compound(Term), functor(Term, F, _), !.
+get_functor_safe(Atom, Atom) :- atom(Atom).
+get_functor_safe(_, '').
+
+build_inverted_index(Infos, InvIndex) :-
+    build_inverted_index(Infos, 0, [], InvIndex).
+
+build_inverted_index([], _, Acc, Acc).
+build_inverted_index([info(_, Vars, _)|Rest], Idx, Acc, Result) :-
+    update_index(Vars, Idx, Acc, NextAcc),
+    NextIdx is Idx + 1,
+    build_inverted_index(Rest, NextIdx, NextAcc, Result).
+
+update_index([], _, Acc, Acc).
+update_index([Var|Rest], Idx, Acc, Result) :-
+    update_var_entry(Var, Idx, Acc, NewAcc),
+    update_index(Rest, Idx, NewAcc, Result).
+
+update_var_entry(Var, Idx, [], [entry(Var, [Idx])]).
+update_var_entry(Var, Idx, [entry(V, Idxs)|Rest], [entry(V, [Idx|Idxs])|Rest]) :-
+    Var == V, !.
+update_var_entry(Var, Idx, [Entry|Rest], [Entry|NewRest]) :-
+    update_var_entry(Var, Idx, Rest, NewRest).
+
+is_hub_candidate(K, entry(_, Indices)) :-
+    length(Indices, Len),
+    Len >= K.
+
+generate_combos_for_hub(K, Infos, entry(HubVar, Indices), Combos) :-
+    maplist(get_pool_item(Infos, HubVar), Indices, Pool),
+    find_combos(Pool, K, [], [], [], Combos).
+
+get_pool_item(Infos, HubVar, Index, item(Term, NonHubVars, Functor)) :-
+    nth0(Index, Infos, info(Term, Vars, Functor)),
+    select_exact(HubVar, Vars, NonHubVars).
+
+select_exact(X, [Y|Ys], Ys) :- X == Y, !.
+select_exact(X, [Y|Ys], [Y|Zs]) :- select_exact(X, Ys, Zs).
+
+find_combos(_, 0, Combo, _, _, [Combo]) :- !.
+find_combos([], _, _, _, _, []) :- !.
+find_combos([item(Term, NonHubVars, Functor)|Rest], K, CurrentCombo, UsedVars, UsedFunctors, Result) :-
+    (   (Functor \= '' -> \+ member(Functor, UsedFunctors) ; true),
+        check_disjoint(NonHubVars, UsedVars)
+    ->  K1 is K - 1,
+        append(UsedVars, NonHubVars, NewUsedVars),
+        (Functor \= '' -> NewUsedFunctors = [Functor|UsedFunctors] ; NewUsedFunctors = UsedFunctors),
+        find_combos(Rest, K1, [Term|CurrentCombo], NewUsedVars, NewUsedFunctors, Res1)
+    ;   Res1 = []
+    ),
+    find_combos(Rest, K, CurrentCombo, UsedVars, UsedFunctors, Res2),
+    append(Res1, Res2, Result).
+
+check_disjoint([], _).
+check_disjoint([X|Xs], Ys) :-
+    \+ member_exact(X, Ys),
+    check_disjoint(Xs, Ys).
+
+member_exact(X, [Y|_]) :- X == Y, !.
+member_exact(X, [_|Ys]) :- member_exact(X, Ys).
+
+format_combo_output(Combo, [conjunct, [',' | Combo]]).
+
+:- register_fun(unique_combinations_star).
